@@ -4,16 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"log"
-	"net/http"
-	"strconv"
-	"time"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //var config = aws.Config{
@@ -34,6 +36,13 @@ func handleRequest(ctx context.Context, event events.APIGatewayProxyRequest) (ev
 	switch event.HTTPMethod {
 	case "POST":
 		item, err := buildPutItem(event.Body)
+		if err != nil {
+			log.Printf("Error building item: %v", err)
+			return events.APIGatewayProxyResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       fmt.Sprintf("Error processing request: %v", err),
+			}, nil
+		}
 		_, err = dynamoDbClient.PutItem(ctx, &dynamodb.PutItemInput{
 			TableName: &tableName,
 			Item:      item,
@@ -41,13 +50,13 @@ func handleRequest(ctx context.Context, event events.APIGatewayProxyRequest) (ev
 		if err != nil {
 			log.Printf("Couldn't add item to table %v.\n%v", tableName, err)
 			return events.APIGatewayProxyResponse{
-				StatusCode: 400,
+				StatusCode: http.StatusBadRequest,
 				Body:       err.Error(),
 			}, nil
 		}
 
 		return events.APIGatewayProxyResponse{
-			StatusCode: 201,
+			StatusCode: http.StatusCreated,
 		}, nil
 
 	}
@@ -66,17 +75,25 @@ func buildPutItem(eventBody string) (map[string]types.AttributeValue, error) {
 	now := time.Now()
 	provider.CreatedAt = now
 	provider.Id = strconv.FormatInt(now.Unix(), 10)
+	provider.Password = hashPassword(provider.Password)
 	fmt.Printf("provider: %v\n", provider)
 	item, err := attributevalue.MarshalMap(provider)
-	//item["id"] = &types.AttributeValueMemberS{
-	//	Value: strconv.FormatInt(now.Unix(), 10),
-	//}
+
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("item: %v\n", item)
 
 	return item, err
+}
+
+func hashPassword(password string) string {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Error hashing password: %v", err)
+		return ""
+	}
+	return string(hashedPassword)
 }
 
 func main() {
