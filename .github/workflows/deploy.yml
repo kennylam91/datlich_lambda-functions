@@ -3,7 +3,7 @@ name: Deploy Lambda Function by Tag
 on:
   push:
     tags:
-      - '*-tag'  # This triggers the workflow when a tag matching the pattern is pushed
+      - '*-*'  # This triggers the workflow when a tag matching the pattern is pushed
 
 jobs:
   deploy:
