@@ -33,7 +33,7 @@ jobs:
           declare -A function_map
 
           # Map each folder to its respective Lambda function name
-          function_map["service-providers"]="datlich-service-providers-api-handler"
+          function_map["service-providers"]="service-providers-api-Go"
           echo "::set-output name=lambda_func::${function_map[$LAMBDA_FUNC_FOLDER]}"
 
       # Step 4: Set up AWS credentials
