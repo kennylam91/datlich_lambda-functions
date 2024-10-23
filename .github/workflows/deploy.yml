@@ -26,7 +26,7 @@ jobs:
       run: |
         # Extract Lambda function name from the tag pattern {lambda_function_name}-tag
         TAG_NAME="${GITHUB_REF#refs/tags/}"
-        LAMBDA_FUNCTION="$(cut -d'-' -f1 <<< "$TAG_NAME")"
+        LAMBDA_FUNCTION="$(cut -d'_' -f1 <<< "$TAG_NAME")"
         echo "Lambda function to deploy: $LAMBDA_FUNCTION"
         echo "::set-output name=lambda_function::$LAMBDA_FUNCTION"
 
