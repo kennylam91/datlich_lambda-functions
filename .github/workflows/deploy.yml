@@ -1,0 +1,57 @@
+name: Deploy Lambda Function by Tag
+
+on:
+  push:
+    tags:
+      - '*-tag'  # This triggers the workflow when a tag matching the pattern is pushed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout the code
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: Set up Go environment
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22.8'  # Specify your required Go version
+
+    # Step 3: Extract Lambda function name from the tag
+    - name: Extract Lambda function name
+      id: extract_name
+      run: |
+        # Extract Lambda function name from the tag pattern {lambda_function_name}-tag
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+        LAMBDA_FUNCTION="${TAG_NAME%-}"
+        echo "Lambda function to deploy: $LAMBDA_FUNCTION"
+        echo "::set-output name=lambda_function::$LAMBDA_FUNCTION"
+
+    # Step 4: Set up AWS credentials
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1  # Update to your AWS region
+
+    # Step 5: Build and deploy the specific Lambda function
+    - name: Build and Deploy Lambda
+      run: |
+        LAMBDA_FUNCTION="${{ steps.extract_name.outputs.lambda_function }}"
+        echo "Deploying Lambda function: $LAMBDA_FUNCTION"
+
+        # Step 5.1: Build the Go binary
+        cd $LAMBDA_FUNCTION
+        GOOS=linux GOARCH=amd64 go build -o main main.go
+
+        # Step 5.2: Zip the binary
+        zip function.zip main
+
+        # Step 5.3: Deploy the Lambda function
+        aws lambda update-function-code \
+          --function-name "$LAMBDA_FUNCTION" \
+          --zip-file fileb://function.zip
