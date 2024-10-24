@@ -1,4 +1,4 @@
-package service_provider_login
+package main
 
 import (
 	"context"
