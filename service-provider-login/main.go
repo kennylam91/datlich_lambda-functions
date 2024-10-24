@@ -16,7 +16,7 @@ import (
 	"net/http"
 )
 
-var tableName = "service_providers"
+var emailIndex = "email-index"
 
 func handleRequest(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	credential := BasicCredential{}
@@ -38,7 +38,7 @@ func handleRequest(ctx context.Context, event events.APIGatewayProxyRequest) (ev
 		log.Printf("Couldn't build expression for query. Here's why: %v\n", err)
 	}
 	query, err := dynamoDbClient.Query(ctx, &dynamodb.QueryInput{
-		TableName:                 &tableName,
+		IndexName:                 &emailIndex,
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		KeyConditionExpression:    expr.KeyCondition()})
