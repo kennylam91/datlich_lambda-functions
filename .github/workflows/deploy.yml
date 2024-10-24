@@ -34,6 +34,7 @@ jobs:
 
           # Map each folder to its respective Lambda function name
           function_map["service-providers"]="service-providers-api-Go"
+          function_map["service-provider-login"]="service-provider-login"
           echo "::set-output name=lambda_func::${function_map[$LAMBDA_FUNC_FOLDER]}"
 
       # Step 4: Set up AWS credentials
