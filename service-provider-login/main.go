@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
+	"time"
 )
 
 var emailIndex = "email-index"
@@ -83,6 +84,7 @@ func buildSessionCookie(provider ServiceProvider) *http.Cookie {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(8 * time.Hour),
 	}
 }
 
