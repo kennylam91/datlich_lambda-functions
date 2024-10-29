@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -18,14 +17,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-//var config = aws.Config{
-//	Region: "ap-southeast-1",
-//}
-
 var tableName = "service_providers"
 
 func handleRequest(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	fmt.Printf("Body size = %d.\n", len(event.Body))
 	cfg, err := config.LoadDefaultConfig(ctx)
 	dynamoDbClient := dynamodb.NewFromConfig(cfg)
 	if err != nil {
@@ -33,36 +27,95 @@ func handleRequest(ctx context.Context, event events.APIGatewayProxyRequest) (ev
 			StatusCode: 500,
 		}, err
 	}
-	switch event.HTTPMethod {
-	case "POST":
-		item, err := buildPutItem(event.Body)
-		if err != nil {
-			log.Printf("Error building item: %v", err)
-			return events.APIGatewayProxyResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       fmt.Sprintf("Error processing request: %v", err),
-			}, nil
-		}
-		_, err = dynamoDbClient.PutItem(ctx, &dynamodb.PutItemInput{
-			TableName: &tableName,
-			Item:      item,
-		})
-		if err != nil {
-			log.Printf("Couldn't add item to table %v.\n%v", tableName, err)
-			return events.APIGatewayProxyResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       err.Error(),
-			}, nil
+
+	switch event.Resource {
+	case "/service-providers/register":
+		switch event.HTTPMethod {
+		case http.MethodPost:
+			return handleProviderCreationRequest(ctx, event, dynamoDbClient)
 		}
 
-		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusCreated,
-		}, nil
+	case "/service-providers/auth":
+		switch event.HTTPMethod {
+		case http.MethodPost:
+			return handleProviderAuthRequest(ctx, event, dynamoDbClient)
 
+		}
 	}
-	fmt.Println("Hello lambda function from Go")
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusMethodNotAllowed,
+	}, nil
+}
+
+func handleProviderAuthRequest(ctx context.Context, event events.APIGatewayProxyRequest, client *dynamodb.Client) (events.APIGatewayProxyResponse, error) {
+	credential, err := getBasicCredential(event.Body)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       err.Error(),
+		}, nil
+	}
+
+	username, err := attributevalue.Marshal(credential.Username)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+		}, err
+	}
+
+	item, err := client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &tableName,
+		Key:       map[string]types.AttributeValue{"username": username},
+	})
+
+	foundProvider := ServiceProvider{}
+	err = attributevalue.UnmarshalMap(item.Item, &foundProvider)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+		}, err
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(foundProvider.Password), []byte(credential.Password))
+	if err == nil {
+		cookie := buildSessionCookie(foundProvider)
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusOK,
+			Headers: map[string]string{
+				"Set-Cookie": cookie.String(),
+			},
+		}, nil
+	} else {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+		}, nil
+	}
+
+}
+
+func handleProviderCreationRequest(ctx context.Context, event events.APIGatewayProxyRequest, dynamoDbClient *dynamodb.Client) (events.APIGatewayProxyResponse, error) {
+	item, err := buildPutItem(event.Body)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       fmt.Sprintf("Error processing request: %v", err),
+		}, err
+	}
+	_, err = dynamoDbClient.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &tableName,
+		Item:      item,
+	})
+	if err != nil {
+		log.Printf("Couldn't add item to table %v.\n%v", tableName, err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       err.Error(),
+		}, err
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: http.StatusCreated,
 	}, nil
 }
 
@@ -70,30 +123,26 @@ func buildPutItem(eventBody string) (map[string]types.AttributeValue, error) {
 	provider := ServiceProvider{}
 	err := json.Unmarshal([]byte(eventBody), &provider)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Printf("Failed to parse request body %v", eventBody)
+		return nil, err
 	}
-	now := time.Now()
-	provider.CreatedAt = now
-	provider.Id = strconv.FormatInt(now.Unix(), 10)
-	provider.Password = hashPassword(provider.Password)
-	fmt.Printf("provider: %v\n", provider)
-	item, err := attributevalue.MarshalMap(provider)
-
+	provider.CreatedAt = time.Now()
+	rawPassword := provider.Password
+	provider.Password, err = hashPassword(rawPassword)
 	if err != nil {
-		panic(err)
+		fmt.Printf(`Failed to hash password "%v"`, rawPassword)
+		return nil, err
 	}
-	fmt.Printf("item: %v\n", item)
-
-	return item, err
+	return attributevalue.MarshalMap(provider)
 }
 
-func hashPassword(password string) string {
+func hashPassword(password string) (string, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Printf("Error hashing password: %v", err)
-		return ""
+		return "", err
 	}
-	return string(hashedPassword)
+	return string(hashedPassword), nil
 }
 
 func main() {
@@ -101,7 +150,7 @@ func main() {
 }
 
 type ServiceProvider struct {
-	Id        string    `json:"id" dynamodbav:"id"`
+	Username  string    `json:"username" dynamodbav:"username"`
 	Name      string    `json:"name" dynamodbav:"name"`
 	Email     string    `json:"email" dynamodbav:"email"`
 	Phone     string    `json:"phone" dynamodbav:"phone"`

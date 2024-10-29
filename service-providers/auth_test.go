@@ -17,8 +17,8 @@ func Test_getBasicCredential(t *testing.T) {
 	}{
 		{
 			name:    "case ok",
-			args:    args{body: `{"email": "test@example.com", "password": "pass123@"}`},
-			want:    BasicCredential{"test@example.com", "pass123@"},
+			args:    args{body: `{"username": "test", "password": "pass123@"}`},
+			want:    BasicCredential{"test", "pass123@"},
 			wantErr: false,
 		},
 	}
