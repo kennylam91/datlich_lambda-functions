@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func getBasicCredential(body string) (BasicCredential, error) {
+func GetBasicCredential(body string) (BasicCredential, error) {
 	credential := BasicCredential{}
 	err := json.Unmarshal([]byte(body), &credential)
 	if err != nil {
@@ -23,7 +23,7 @@ type BasicCredential struct {
 	Password string `json:"password"`
 }
 
-func buildSessionCookie(provider ServiceProvider) *http.Cookie {
+func BuildSessionCookie(provider ServiceProvider) *http.Cookie {
 	return &http.Cookie{
 		Name:     "session_cookie",
 		Value:    base64.StdEncoding.EncodeToString([]byte(provider.Email)),

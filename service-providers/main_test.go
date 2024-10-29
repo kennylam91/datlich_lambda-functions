@@ -19,13 +19,20 @@ func Test_buildPutItem(t *testing.T) {
 	}{
 		{
 			name: "valid body",
-			args: args{eventBody: `{"name":"doctor", "email": "test@example.com", "phone": "0123456", "password": "` + testPassword + `"}`},
+			args: args{eventBody: `{"username":"username", "name":"my name", "email": "test@example.com", "phone": "0123456", "password": "` + testPassword + `"}`},
 			want: map[string]types.AttributeValue{
-				"name":  &types.AttributeValueMemberS{Value: "doctor"},
-				"email": &types.AttributeValueMemberS{Value: "test@example.com"},
-				"phone": &types.AttributeValueMemberS{Value: "0123456"},
+				"username": &types.AttributeValueMemberS{Value: "username"},
+				"name":     &types.AttributeValueMemberS{Value: "my name"},
+				"email":    &types.AttributeValueMemberS{Value: "test@example.com"},
+				"phone":    &types.AttributeValueMemberS{Value: "0123456"},
 			},
 			wantErr: false,
+		},
+		{
+			name:    "missing required fields",
+			args:    args{eventBody: `{}`},
+			want:    nil,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -35,17 +42,19 @@ func Test_buildPutItem(t *testing.T) {
 				t.Errorf("buildPutItem() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			for _, field := range []string{"name", "email", "phone"} {
-				if !reflect.DeepEqual(got[field], tt.want[field]) {
-					t.Errorf("buildPutItem() field '%v' got = %v, want %v", field, got[field], tt.want[field])
-					return
+			if !tt.wantErr {
+				for _, field := range []string{"username", "name", "email", "phone"} {
+					if !reflect.DeepEqual(got[field], tt.want[field]) {
+						t.Errorf("buildPutItem() field '%v' got = %v, want %v", field, got[field], tt.want[field])
+						return
+					}
 				}
-			}
 
-			for _, field := range []string{"id", "createdAt"} {
-				if got[field] == nil {
-					t.Errorf("buildPutItem() field %v is nil", field)
-					return
+				for _, field := range []string{"createdAt"} {
+					if got[field] == nil {
+						t.Errorf("buildPutItem() field %v is nil", field)
+						return
+					}
 				}
 			}
 
