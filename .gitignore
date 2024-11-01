@@ -1,2 +1,4 @@
 
 .idea/
+service-providers/bootstrap
+service-providers/lambda-handler.zip
