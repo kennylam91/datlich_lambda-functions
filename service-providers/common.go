@@ -3,7 +3,7 @@ package main
 import "time"
 
 type ServiceProvider struct {
-	Username  string    `json:"username" dynamodbav:"username" validate:"required"`
+	Username  string    `json:"username" dynamodbav:"username" validate:"required,username"`
 	Name      string    `json:"name" dynamodbav:"name" validate:"required"`
 	Email     string    `json:"email" dynamodbav:"email" validate:"required,email"`
 	Phone     string    `json:"phone" dynamodbav:"phone"`

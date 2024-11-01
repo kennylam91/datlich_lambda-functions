@@ -7,6 +7,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"log"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -59,17 +60,12 @@ func handleProviderAuthRequest(ctx context.Context, event events.APIGatewayProxy
 		}, nil
 	}
 
-	username, err := attributevalue.Marshal(credential.Username)
+	item, err := getProviderByUsername(ctx, credential.Username, client)
 	if err != nil {
 		return events.APIGatewayProxyResponse{}, err
 	}
 
-	item, err := client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: &tableName,
-		Key:       map[string]types.AttributeValue{"username": username},
-	})
-
-	if err != nil {
+	if item.Item == nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusNotFound,
 		}, nil
@@ -101,7 +97,25 @@ func handleProviderAuthRequest(ctx context.Context, event events.APIGatewayProxy
 }
 
 func handleProviderCreationRequest(ctx context.Context, event events.APIGatewayProxyRequest, dynamoDbClient *dynamodb.Client) (events.APIGatewayProxyResponse, error) {
-	item, err := buildPutItem(event.Body)
+	provider := ServiceProvider{}
+	err := json.Unmarshal([]byte(event.Body), &provider)
+	if err != nil {
+		fmt.Printf("Failed to parse request body %v", event.Body)
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+		}, nil
+	}
+
+	// check username existence
+	foundProviderItem, err := getProviderByUsername(ctx, provider.Username, dynamoDbClient)
+	if foundProviderItem != nil && foundProviderItem.Item != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       "username_existed",
+		}, nil
+	}
+
+	item, err := buildPutItem(&provider)
 	if err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
@@ -122,13 +136,8 @@ func handleProviderCreationRequest(ctx context.Context, event events.APIGatewayP
 	}, nil
 }
 
-func buildPutItem(eventBody string) (map[string]types.AttributeValue, error) {
-	provider := ServiceProvider{}
-	err := json.Unmarshal([]byte(eventBody), &provider)
-	if err != nil {
-		fmt.Printf("Failed to parse request body %v", eventBody)
-		return nil, err
-	}
+func buildPutItem(provider *ServiceProvider) (map[string]types.AttributeValue, error) {
+	var err error
 	provider.CreatedAt = time.Now()
 	rawPassword := provider.Password
 	provider.Password, err = hashPassword(rawPassword)
@@ -138,6 +147,13 @@ func buildPutItem(eventBody string) (map[string]types.AttributeValue, error) {
 	}
 
 	validate := validator.New(validator.WithRequiredStructEnabled())
+	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]{3,20}$`)
+	err = validate.RegisterValidation("username", func(fl validator.FieldLevel) bool {
+		return usernameRegex.MatchString(fl.Field().String())
+	})
+	if err != nil {
+		return nil, err
+	}
 	err = validate.Struct(provider)
 
 	if err != nil {

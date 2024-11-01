@@ -4,11 +4,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func Test_buildPutItem(t *testing.T) {
 	type args struct {
-		eventBody string
+		provider *ServiceProvider
 	}
 	testPassword := "pass"
 	var tests = []struct {
@@ -19,7 +20,9 @@ func Test_buildPutItem(t *testing.T) {
 	}{
 		{
 			name: "valid body",
-			args: args{eventBody: `{"username":"username", "name":"my name", "email": "test@example.com", "phone": "0123456", "password": "` + testPassword + `"}`},
+			args: args{
+				provider: &ServiceProvider{"username", "my name", "test@example.com", "0123456", testPassword, time.Now()},
+			},
 			want: map[string]types.AttributeValue{
 				"username": &types.AttributeValueMemberS{Value: "username"},
 				"name":     &types.AttributeValueMemberS{Value: "my name"},
@@ -30,14 +33,20 @@ func Test_buildPutItem(t *testing.T) {
 		},
 		{
 			name:    "missing required fields",
-			args:    args{eventBody: `{}`},
+			args:    args{provider: &ServiceProvider{}},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "invalid username",
+			args:    args{provider: &ServiceProvider{"user name", "name", "test123@gmail.com", "", "pass", time.Now()}},
 			want:    nil,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildPutItem(tt.args.eventBody)
+			got, err := buildPutItem(tt.args.provider)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildPutItem() error = %v, wantErr %v", err, tt.wantErr)
 				return
