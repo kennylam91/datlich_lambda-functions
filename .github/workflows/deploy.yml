@@ -54,7 +54,7 @@ jobs:
 
           # Step 5.1: Build the Go binary
           cd $LAMBDA_FUNC_FOLDER
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap .
 
           # Step 5.2: Zip the binary
           zip lambda-handler.zip bootstrap
